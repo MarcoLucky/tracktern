@@ -50,14 +50,14 @@
   async function handleExportDtrPDF() {
     try {
       const res = await apiRequest('/student/reports/dtr/export');
-      alert(JSON.stringify(res.report, null, 2));
+      showAppDetails('DTR Report Payload', res.report);
     } catch(err) {}
   }
 
   async function handleExportProgressPDF() {
     try {
       const res = await apiRequest('/student/reports/progress/export');
-      alert(JSON.stringify(res.report, null, 2));
+      showAppDetails('Progress Report Payload', res.report);
     } catch(err) {}
   }
 </script>

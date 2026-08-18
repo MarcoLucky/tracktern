@@ -39,6 +39,7 @@ class PdfReportService
                 'student_number' => $student->student_number,
                 'student_code' => $student->student_code,
                 'company_name' => $student->company_name,
+                'organization_location' => $student->organization_location,
                 'course' => $student->course ? $student->course->course_name : 'N/A',
             ],
             'progress' => $progress,
@@ -46,8 +47,7 @@ class PdfReportService
                 'date' => $item->date ? $item->date->format('Y-m-d') : 'N/A',
                 'time_in' => $item->time_in ? $item->time_in->format('h:i:s A') : 'N/A',
                 'time_out' => $item->time_out ? $item->time_out->format('h:i:s A') : 'Pending',
-                'rendered_minutes' => $item->rendered_minutes,
-                'rendered_hours' => round($item->rendered_minutes / 60, 2),
+                'rendered_hours' => $item->rendered_hours,
                 'status' => $item->status,
                 'notes' => $item->notes,
             ]),
@@ -71,6 +71,7 @@ class PdfReportService
                 'email' => $student->user ? $student->user->email : 'N/A',
                 'student_number' => $student->student_number,
                 'company_name' => $student->company_name,
+                'organization_location' => $student->organization_location,
             ],
             'progress' => $progress,
             'tasks_summary' => $tasks->map(fn ($t) => [
@@ -113,5 +114,131 @@ class PdfReportService
             'total_students' => $studentsProgress->count(),
             'students' => $studentsProgress,
         ];
+    }
+
+    /**
+     * Generate a downloadable classroom summary PDF.
+     */
+    public function generateClassroomSummaryPdf(Classroom $classroom): string
+    {
+        $report = $this->generateClassroomReport($classroom);
+        $classroomInfo = $report['classroom'];
+        $lines = [
+            'Generated: ' . $report['generated_at'],
+            'Classroom: ' . $classroomInfo['name'],
+            'Invitation Code: ' . $classroomInfo['code'],
+            'Teacher: ' . $classroomInfo['teacher'],
+            'Course: ' . $classroomInfo['course'],
+            'Required Hours: ' . $classroomInfo['required_hours'],
+            'Total Students: ' . $report['total_students'],
+            '',
+            'Student Summary',
+            str_repeat('-', 72),
+        ];
+
+        if ($report['students']->isEmpty()) {
+            $lines[] = 'No students enrolled in this classroom.';
+        }
+
+        foreach ($report['students'] as $index => $student) {
+            $lines[] = ($index + 1) . '. ' . $student['student_name'] . ' (' . $student['intern_id'] . ')';
+            $lines[] = '   Company: ' . ($student['company_name'] ?? 'N/A');
+            $lines[] = '   Location: ' . ($student['organization_location'] ?? 'N/A');
+            $lines[] = '   Required Hours: ' . $student['required_target_hours'];
+            $lines[] = '   Rendered Hours: ' . $student['total_rendered_hours'];
+            $lines[] = '   Remaining Hours: ' . $student['remaining_hours'];
+            $lines[] = '   Progress: ' . $student['progress_percentage'] . '%';
+            $lines[] = '   Status: ' . $student['status_badge'];
+            $lines[] = '';
+        }
+
+        return $this->buildTextPdf($report['title'], $lines);
+    }
+
+    private function buildTextPdf(string $title, array $lines): string
+    {
+        $wrappedLines = [];
+        foreach ($lines as $line) {
+            $line = $this->normalizePdfText((string) $line);
+            if ($line === '') {
+                $wrappedLines[] = '';
+                continue;
+            }
+
+            foreach (explode("\n", wordwrap($line, 96, "\n", true)) as $wrappedLine) {
+                $wrappedLines[] = $wrappedLine;
+            }
+        }
+
+        $pages = array_chunk($wrappedLines, 47);
+        if (!$pages) {
+            $pages = [[]];
+        }
+
+        $objects = [
+            1 => '<< /Type /Catalog /Pages 2 0 R >>',
+            3 => '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>',
+            4 => '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>',
+        ];
+
+        $pageIds = [];
+        $nextObjectId = 5;
+
+        foreach ($pages as $pageIndex => $pageLines) {
+            $content = "BT\n/F2 15 Tf\n50 760 Td\n";
+            $content .= '(' . $this->escapePdfText($title . ' - Page ' . ($pageIndex + 1)) . ") Tj\n";
+            $content .= "/F1 9 Tf\n0 -24 Td\n";
+
+            foreach ($pageLines as $line) {
+                $content .= '(' . $this->escapePdfText($line) . ") Tj\n0 -13 Td\n";
+            }
+
+            $content .= "ET\n";
+
+            $contentObjectId = $nextObjectId++;
+            $pageObjectId = $nextObjectId++;
+
+            $objects[$contentObjectId] = "<< /Length " . strlen($content) . " >>\nstream\n" . $content . "endstream";
+            $objects[$pageObjectId] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {$contentObjectId} 0 R >>";
+            $pageIds[] = $pageObjectId;
+        }
+
+        $objects[2] = '<< /Type /Pages /Count ' . count($pageIds) . ' /Kids [' . implode(' ', array_map(fn ($id) => "{$id} 0 R", $pageIds)) . '] >>';
+        ksort($objects);
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [];
+        $maxObjectId = max(array_keys($objects));
+
+        for ($id = 1; $id <= $maxObjectId; $id++) {
+            $offsets[$id] = strlen($pdf);
+            $pdf .= "{$id} 0 obj\n{$objects[$id]}\nendobj\n";
+        }
+
+        $xrefOffset = strlen($pdf);
+        $pdf .= "xref\n0 " . ($maxObjectId + 1) . "\n";
+        $pdf .= "0000000000 65535 f \n";
+
+        for ($id = 1; $id <= $maxObjectId; $id++) {
+            $pdf .= sprintf("%010d 00000 n \n", $offsets[$id]);
+        }
+
+        $pdf .= "trailer\n<< /Size " . ($maxObjectId + 1) . " /Root 1 0 R >>\n";
+        $pdf .= "startxref\n{$xrefOffset}\n%%EOF";
+
+        return $pdf;
+    }
+
+    private function normalizePdfText(string $value): string
+    {
+        $converted = function_exists('iconv') ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value) : $value;
+        $converted = $converted === false ? $value : $converted;
+
+        return preg_replace('/[^\x20-\x7E]/', '', $converted) ?? '';
+    }
+
+    private function escapePdfText(string $value): string
+    {
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $this->normalizePdfText($value));
     }
 }

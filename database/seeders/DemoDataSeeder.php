@@ -34,6 +34,7 @@ class DemoDataSeeder extends Seeder
             [
                 'employee_number' => 'EMP-2026-001',
                 'department' => 'College of Information Technology',
+                'contact_number' => '09170000001',
             ]
         );
 
@@ -68,6 +69,7 @@ class DemoDataSeeder extends Seeder
                 'intern_id' => '58492',
                 'course_id' => $bsitCourse?->id,
                 'company_name' => 'Acme Tech Solutions Inc.',
+                'organization_location' => 'Makati City',
                 'internship_start_date' => Carbon::now()->subDays(30),
                 'internship_end_date' => Carbon::now()->addDays(60),
                 'target_hours' => 400,
@@ -98,6 +100,7 @@ class DemoDataSeeder extends Seeder
                 'intern_id' => '10293',
                 'course_id' => $bsitCourse?->id,
                 'company_name' => 'Global Software Innovations',
+                'organization_location' => 'Quezon City',
                 'internship_start_date' => Carbon::now()->subDays(30),
                 'internship_end_date' => Carbon::now()->addDays(60),
                 'target_hours' => 400,

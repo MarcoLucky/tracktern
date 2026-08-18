@@ -31,15 +31,13 @@ class StudentDashboardController extends Controller
 
         $progressData = $this->renderedHoursService->calculateStudentProgress($student);
 
-        // Recent 5 attendance records & recent 5 tasks
-        $recentAttendance = $student->attendance()->latest('date')->take(5)->get();
-        $recentTasks = $student->tasks()->latest('submitted_at')->take(5)->get();
+        // Recent 5 attendance records
+        $recentAttendance = $student->attendance()->orderByDesc('time_in')->take(5)->get();
 
         return response()->json([
             'student_profile' => $student,
             'summary' => $progressData,
             'recent_attendance' => $recentAttendance,
-            'recent_tasks' => $recentTasks,
         ]);
     }
 }

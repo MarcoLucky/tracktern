@@ -15,6 +15,7 @@ class Teacher extends Model
         'user_id',
         'employee_number',
         'department',
+        'contact_number',
     ];
 
     public function user(): BelongsTo

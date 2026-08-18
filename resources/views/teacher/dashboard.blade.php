@@ -41,14 +41,6 @@
             <div class="metric-label">Pending Task Reviews</div>
             <div class="metric-value" style="color: #92400E;">${s.pending_task_approvals}</div>
           </div>
-          <div class="metric-card">
-            <div class="metric-label">Pending Report Reviews</div>
-            <div class="metric-value" style="color: #92400E;">${s.pending_weekly_reports}</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Students Behind</div>
-            <div class="metric-value" style="color: #991B1B;">${s.students_behind_schedule}</div>
-          </div>
         </div>
 
         <div class="table-container">
@@ -64,6 +56,7 @@
                 <th>Target Hours</th>
                 <th>Academic Term</th>
                 <th>Students Enrolled</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -74,8 +67,13 @@
                   <td>${c.required_hours} hrs</td>
                   <td>${c.semester} (${c.academic_year})</td>
                   <td>${c.students ? c.students.length : 0} students</td>
+                  <td>
+                    <a href="/teacher/classrooms?view=${c.id}" class="icon-action-button" aria-label="View classroom management" title="View classroom management">
+                      <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </a>
+                  </td>
                 </tr>
-              `).join('') : '<tr><td colspan="5" style="text-align:center;">No classrooms created yet.</td></tr>'}
+              `).join('') : '<tr><td colspan="6" style="text-align:center;">No classrooms created yet.</td></tr>'}
             </tbody>
           </table>
         </div>

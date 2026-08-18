@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Classroom;
 use App\Models\Task;
-use App\Models\WeeklyReport;
 use App\Models\Attendance;
 use App\Services\RenderedHoursService;
 use Illuminate\Http\Request;
@@ -43,19 +42,15 @@ class TeacherDashboardController extends Controller
 
         // Pending Approvals
         $pendingTasksCount = Task::whereIn('classroom_id', $classroomIds)->where('status', 'pending')->count();
-        $pendingWeeklyReportsCount = WeeklyReport::whereIn('classroom_id', $classroomIds)->where('status', 'pending')->count();
 
-        // Student status calculation (Completed, Behind)
+        // Student status calculation (Completed)
         $completedCount = 0;
-        $behindScheduleCount = 0;
 
         foreach ($classrooms as $classroom) {
             foreach ($classroom->students as $student) {
                 $progress = $this->renderedHoursService->calculateStudentProgress($student, $classroom->id);
                 if ($progress['status_badge'] === 'Completed') {
                     $completedCount++;
-                } elseif ($progress['status_badge'] === 'Behind') {
-                    $behindScheduleCount++;
                 }
             }
         }
@@ -68,8 +63,6 @@ class TeacherDashboardController extends Controller
                 'students_currently_rendering' => $currentlyRenderingCount,
                 'completed_internships' => $completedCount,
                 'pending_task_approvals' => $pendingTasksCount,
-                'pending_weekly_reports' => $pendingWeeklyReportsCount,
-                'students_behind_schedule' => $behindScheduleCount,
             ],
             'classrooms' => $classrooms,
         ]);

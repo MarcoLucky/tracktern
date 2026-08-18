@@ -21,7 +21,7 @@
     if (!cid) return;
     try {
       const res = await apiRequest(`/teacher/reports/classroom/${cid}/export`);
-      alert(JSON.stringify(res.report, null, 2));
+      showAppDetails('Classroom Report Payload', res.report);
     } catch(err) {}
   }
 </script>

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Student extends Model
 {
@@ -17,10 +18,16 @@ class Student extends Model
         'intern_id',
         'course_id',
         'company_name',
+        'organization_location',
+        'profile_photo_path',
         'internship_start_date',
         'internship_end_date',
         'target_hours',
         'contact_number',
+    ];
+
+    protected $appends = [
+        'profile_photo_url',
     ];
 
     protected $casts = [
@@ -28,6 +35,15 @@ class Student extends Model
         'internship_end_date' => 'date',
         'target_hours' => 'integer',
     ];
+
+    public function getProfilePhotoUrlAttribute(): ?string
+    {
+        if (!$this->profile_photo_path) {
+            return null;
+        }
+
+        return Storage::url($this->profile_photo_path);
+    }
 
     public function user(): BelongsTo
     {
@@ -54,5 +70,10 @@ class Student extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    public function weeklyReports(): HasMany
+    {
+        return $this->hasMany(WeeklyReport::class);
     }
 }

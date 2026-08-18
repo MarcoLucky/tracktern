@@ -22,8 +22,13 @@ class TaskNotificationMail extends Mailable
 
     public function build()
     {
-        $statusText = $this->actionType === 'approve' ? 'Approved' : 'Revision Requested';
+        $statusText = match ($this->actionType) {
+            'approve' => 'Approved',
+            'reject' => 'Rejected',
+            default => 'Revision Requested',
+        };
         $subject = "TrackTern Notification: Task Log {$statusText} - {$this->task->title}";
+        $statusColor = $this->actionType === 'approve' ? '#007A33' : '#DC2626';
 
         return $this->subject($subject)
             ->html("
@@ -32,7 +37,7 @@ class TaskNotificationMail extends Mailable
                     <p>Hello <strong>{$this->task->student->user->name}</strong>,</p>
                     <p>Your submitted task log <strong>\"{$this->task->title}\"</strong> has been reviewed by your instructor.</p>
                     <ul>
-                        <li><strong>Status:</strong> <span style='color: " . ($this->actionType === 'approve' ? '#007A33' : '#DC2626') . "; font-weight: bold;'>{$statusText}</span></li>
+                        <li><strong>Status:</strong> <span style='color: {$statusColor}; font-weight: bold;'>{$statusText}</span></li>
                         <li><strong>Category:</strong> {$this->task->category}</li>
                         <li><strong>Submitted Date:</strong> {$this->task->submitted_at->format('Y-m-d')}</li>
                         <li><strong>Teacher Feedback:</strong> " . ($this->task->teacher_feedback ?: 'None provided') . "</li>

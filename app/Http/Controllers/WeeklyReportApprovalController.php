@@ -4,13 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\WeeklyReport;
 use App\Services\AuditLogService;
-use App\Mail\WeeklyReportNotificationMail;
-use Illuminate\Support\Facades\Mail;
+use App\Services\PhpMailerService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class WeeklyReportApprovalController extends Controller
 {
+    protected PhpMailerService $mailerService;
+
+    public function __construct(PhpMailerService $mailerService)
+    {
+        $this->mailerService = $mailerService;
+    }
+
     public function index(Request $request): JsonResponse
     {
         $teacher = $request->user()->teacher;
@@ -57,7 +63,7 @@ class WeeklyReportApprovalController extends Controller
 
         if ($report->student && $report->student->user && $report->student->user->email) {
             try {
-                Mail::to($report->student->user->email)->send(new WeeklyReportNotificationMail($report, 'approve'));
+                $this->mailerService->sendWeeklyReportNotification($report, 'approve');
             } catch (\Throwable $e) {}
         }
 
@@ -95,7 +101,7 @@ class WeeklyReportApprovalController extends Controller
 
         if ($report->student && $report->student->user && $report->student->user->email) {
             try {
-                Mail::to($report->student->user->email)->send(new WeeklyReportNotificationMail($report, 'revision'));
+                $this->mailerService->sendWeeklyReportNotification($report, 'revision');
             } catch (\Throwable $e) {}
         }
 

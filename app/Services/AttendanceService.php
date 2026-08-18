@@ -4,14 +4,18 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\Student;
-use App\Models\Classroom;
-use App\Mail\AttendanceNotificationMail;
-use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 use Exception;
 
 class AttendanceService
 {
+    protected PhpMailerService $mailerService;
+
+    public function __construct(PhpMailerService $mailerService)
+    {
+        $this->mailerService = $mailerService;
+    }
+
     /**
      * Authenticated student Time In.
      */
@@ -20,7 +24,7 @@ class AttendanceService
         $existingOpen = Attendance::where('student_id', $student->id)->open()->first();
 
         if ($existingOpen) {
-            throw new Exception('You already have an active Time In session recorded at ' . $existingOpen->time_in->format('Y-m-d H:i:s') . '. Please Time Out first.');
+            throw new Exception('You already have an active Time In session recorded at ' . $existingOpen->time_in->format('m/d/Y h:i A') . '. Please Time Out first.');
         }
 
         if (!$classroomId) {
@@ -54,7 +58,7 @@ class AttendanceService
 
         if ($student->user && $student->user->email) {
             try {
-                Mail::to($student->user->email)->send(new AttendanceNotificationMail($attendance, 'time-in'));
+                $this->mailerService->sendAttendanceNotification($attendance, 'time-in');
             } catch (\Throwable $e) {}
         }
 
@@ -98,7 +102,7 @@ class AttendanceService
 
         if ($student->user && $student->user->email) {
             try {
-                Mail::to($student->user->email)->send(new AttendanceNotificationMail($openAttendance, 'time-out'));
+                $this->mailerService->sendAttendanceNotification($openAttendance, 'time-out');
             } catch (\Throwable $e) {}
         }
 
@@ -135,10 +139,29 @@ class AttendanceService
             'student_name_masked' => $this->maskName($student->user->name),
             'intern_id' => $student->intern_id,
             'action' => $actionType,
-            'timestamp' => Carbon::now()->format('Y-m-d h:i:s A'),
-            'rendered_minutes' => $attendance->rendered_minutes,
+            'timestamp' => Carbon::now()->format('m/d/Y h:i A'),
             'rendered_hours' => $renderedHours,
         ];
+    }
+
+    /**
+     * Public kiosk action that automatically Time Ins first, then Time Outs
+     * the next time the same intern ID is entered while a session is open.
+     */
+    public function quickKioskAutoAttendance(string $internId, ?string $ipAddress = null, ?string $userAgent = null): array
+    {
+        $code = trim($internId);
+        $student = Student::where('intern_id', $code)->first();
+
+        if (!$student) {
+            throw new Exception('Invalid Intern ID. Account not found.');
+        }
+
+        $actionType = Attendance::where('student_id', $student->id)->open()->exists()
+            ? 'time-out'
+            : 'time-in';
+
+        return $this->quickKioskAttendance($code, $actionType, $ipAddress, $userAgent);
     }
 
     private function maskName(string $name): string

@@ -13,36 +13,26 @@
 
   @yield('content')
 
-  <!-- Toast Notification Alert -->
-  <div id="toast" class="alert-toast" style="display: none;"></div>
+  @include('partials.message-dialog')
+  @include('partials.app-ui-scripts')
 
   <script>
     const API_BASE = '/api/v1';
-
-    function showToast(message, isError = false) {
-      const toast = document.getElementById('toast');
-      if (!toast) return;
-      toast.textContent = message;
-      toast.style.borderLeftColor = isError ? '#DC2626' : '#004798';
-      toast.style.display = 'block';
-      setTimeout(() => {
-        toast.style.display = 'none';
-      }, 4000);
-    }
 
     async function apiRequest(endpoint, method = 'GET', body = null) {
       const token = localStorage.getItem('tracktern_token');
       const headers = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      if (body) headers['Content-Type'] = 'application/json';
+      const isFormData = body instanceof FormData;
+      if (body && !isFormData) headers['Content-Type'] = 'application/json';
 
       const config = { method, headers };
-      if (body) config.body = JSON.stringify(body);
+      if (body) config.body = isFormData ? body : JSON.stringify(body);
 
       try {
         const res = await fetch(`${API_BASE}${endpoint}`, config);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Error occurred.');
+        if (!res.ok) throw new Error(extractApiMessage(data));
         return data;
       } catch (err) {
         showToast(err.message, true);

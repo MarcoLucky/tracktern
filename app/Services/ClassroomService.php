@@ -44,6 +44,10 @@ class ClassroomService
             throw new Exception('Invalid classroom code. Please check and try again.');
         }
 
+        if ($student->classrooms()->wherePivot('status', 'active')->exists()) {
+            throw new Exception('You are already enrolled in a classroom. Leave your current class before joining another.');
+        }
+
         if ($student->classrooms()->where('classroom_id', $classroom->id)->exists()) {
             throw new Exception('Student is already enrolled in this classroom.');
         }
@@ -59,6 +63,30 @@ class ClassroomService
             userId: $student->user_id,
             recordId: $classroom->id,
             payload: ['classroom_code' => $classroomCode]
+        );
+
+        return $classroom;
+    }
+
+    /**
+     * Leave a classroom so the student can enroll in another one later.
+     */
+    public function leaveClassroom(Student $student, int $classroomId): Classroom
+    {
+        $classroom = $student->classrooms()->where('classroom_id', $classroomId)->first();
+
+        if (!$classroom) {
+            throw new Exception('You are not enrolled in this classroom.');
+        }
+
+        $student->classrooms()->detach($classroomId);
+
+        AuditLogService::log(
+            action: 'leave_classroom',
+            module: 'classroom',
+            userId: $student->user_id,
+            recordId: $classroom->id,
+            payload: ['classroom_code' => $classroom->classroom_code]
         );
 
         return $classroom;

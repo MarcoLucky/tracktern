@@ -33,10 +33,10 @@ class AttendanceNotificationMail extends Mailable
                     <p>Hello <strong>{$this->attendance->student->user->name}</strong>,</p>
                     <p>Your DTR <strong>" . strtoupper($this->actionType) . "</strong> has been recorded successfully with server-verified timestamp.</p>
                     <ul>
-                        <li><strong>Student Code / ID:</strong> {$this->attendance->student->student_code}</li>
+                        <li><strong>Student Code / ID:</strong> {$this->attendance->student->intern_id}</li>
                         <li><strong>Date:</strong> {$this->attendance->date->format('Y-m-d')}</li>
                         <li><strong>Timestamp:</strong> " . ($this->actionType === 'time-in' ? $this->attendance->time_in->format('Y-m-d h:i:s A') : $this->attendance->time_out->format('Y-m-d h:i:s A')) . "</li>
-                        " . ($this->actionType === 'time-out' ? "<li><strong>Rendered Time:</strong> " . round($this->attendance->rendered_minutes / 60, 2) . " hours ({$this->attendance->rendered_minutes} mins)</li>" : "") . "
+                        " . ($this->actionType === 'time-out' ? "<li><strong>Rendered Time:</strong> " . number_format($this->attendance->rendered_hours, 2) . " hours</li>" : "") . "
                     </ul>
                     <p>Thank you for keeping your internship time records up to date.</p>
                     <hr style='border: none; border-top: 1px solid #E5E7EB;'>

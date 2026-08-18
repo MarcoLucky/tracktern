@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Services\PdfReportService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class TeacherReportController extends Controller
 {
@@ -20,17 +21,17 @@ class TeacherReportController extends Controller
     /**
      * Export Classroom Summary Report payload.
      */
-    public function exportClassroom(Request $request, int $classroomId): JsonResponse
+    public function exportClassroom(Request $request, int $classroomId): Response
     {
         $teacher = $request->user()->teacher;
 
         $classroom = Classroom::where('teacher_id', $teacher->id)->findOrFail($classroomId);
+        $pdf = $this->pdfReportService->generateClassroomSummaryPdf($classroom);
+        $filename = 'classroom-summary-' . strtolower($classroom->classroom_code) . '.pdf';
 
-        $reportData = $this->pdfReportService->generateClassroomReport($classroom);
-
-        return response()->json([
-            'message' => 'Classroom Summary Report compiled successfully.',
-            'report' => $reportData,
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
 

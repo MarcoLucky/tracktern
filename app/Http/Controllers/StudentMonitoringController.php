@@ -54,7 +54,14 @@ class StudentMonitoringController extends Controller
     {
         $teacher = $request->user()->teacher;
 
+        if (!$teacher) {
+            return response()->json(['message' => 'Teacher profile required.'], 403);
+        }
+
         $student = Student::with(['user', 'course', 'attendance', 'tasks.attachments', 'weeklyReports.attachments'])
+            ->whereHas('classrooms', function ($query) use ($teacher) {
+                $query->where('teacher_id', $teacher->id);
+            })
             ->findOrFail($studentId);
 
         $progress = $this->renderedHoursService->calculateStudentProgress($student);

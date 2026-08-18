@@ -36,7 +36,7 @@
         <tr>
           <td><strong>${r.student && r.student.user ? r.student.user.name : 'Student'}</strong></td>
           <td>Week ${r.week_number}</td>
-          <td>${r.coverage_start_date} to ${r.coverage_end_date}</td>
+          <td>${formatAppDate(r.coverage_start_date)} to ${formatAppDate(r.coverage_end_date)}</td>
           <td>${r.activities}</td>
           <td>
             <div style="display:flex; gap:8px;">
@@ -59,7 +59,7 @@
   }
 
   async function handleRevisionReport(reportId) {
-    const feedback = prompt('Enter actionable feedback for weekly report revision:');
+    const feedback = await showAppPrompt('Enter actionable feedback for weekly report revision:');
     if (!feedback) return;
     try {
       const res = await apiRequest(`/teacher/reports/${reportId}/revision`, 'POST', { feedback });

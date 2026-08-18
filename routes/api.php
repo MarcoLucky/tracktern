@@ -22,9 +22,12 @@ Route::prefix('v1')->group(function () {
     // Auth
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
 
     // Quick Public Attendance Kiosk (Rate Limited)
     Route::middleware('throttle:15,1')->prefix('attendance/quick')->group(function () {
+        Route::post('/record', [QuickAttendanceController::class, 'record']);
         Route::post('/time-in', [QuickAttendanceController::class, 'timeIn']);
         Route::post('/time-out', [QuickAttendanceController::class, 'timeOut']);
     });
@@ -38,6 +41,7 @@ Route::prefix('v1')->group(function () {
         // Shared User Profile & Auth
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
+        Route::post('/auth/profile/photo', [AuthController::class, 'updateProfilePhoto']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -51,12 +55,14 @@ Route::prefix('v1')->group(function () {
 
             // Attendance / DTR
             Route::get('/dtr', [StudentAttendanceController::class, 'index']);
+            Route::get('/dtr/calendar', [StudentAttendanceController::class, 'calendar']);
             Route::post('/dtr/time-in', [StudentAttendanceController::class, 'timeIn']);
             Route::post('/dtr/time-out', [StudentAttendanceController::class, 'timeOut']);
 
             // Classroom
             Route::get('/classroom', [ClassroomController::class, 'index']);
             Route::post('/classroom/join', [ClassroomController::class, 'join']);
+            Route::delete('/classroom/{id}/leave', [ClassroomController::class, 'leave']);
 
             // Tasks
             Route::get('/tasks', [StudentTaskController::class, 'index']);
@@ -82,13 +88,18 @@ Route::prefix('v1')->group(function () {
             Route::post('/classrooms', [ClassroomController::class, 'store']);
             Route::get('/classrooms/{id}', [ClassroomController::class, 'show']);
             Route::put('/classrooms/{id}', [ClassroomController::class, 'update']);
+            Route::delete('/classrooms/{classroomId}/students/{studentId}', [ClassroomController::class, 'unenrollStudent']);
             Route::delete('/classrooms/{id}', [ClassroomController::class, 'destroy']);
 
             // Student Monitoring & Task Approvals
             Route::get('/monitoring', [StudentMonitoringController::class, 'index']);
             Route::get('/monitoring/student/{studentId}', [StudentMonitoringController::class, 'showStudent']);
             Route::get('/tasks/approvals', [TaskApprovalController::class, 'index']);
+            Route::post('/tasks/approvals/approve-all', [TaskApprovalController::class, 'approveAll']);
+            Route::post('/tasks/approvals/students/{studentId}/approve-all', [TaskApprovalController::class, 'approveAllForStudent']);
+            Route::get('/tasks/{id}', [TaskApprovalController::class, 'show']);
             Route::post('/tasks/{id}/approve', [TaskApprovalController::class, 'approve']);
+            Route::post('/tasks/{id}/reject', [TaskApprovalController::class, 'reject']);
             Route::post('/tasks/{id}/revision', [TaskApprovalController::class, 'requestRevision']);
 
             // PDF / Data Export Center

@@ -43,7 +43,7 @@
         return `
           <tr>
             <td><strong>${s.student_name}</strong></td>
-            <td><code style="font-size:14px; font-weight:800; color:#004798;">${s.student_code}</code></td>
+            <td><code style="font-size:14px; font-weight:800; color:#004798;">${s.intern_id}</code></td>
             <td>${s.classroom_name}</td>
             <td>${s.total_rendered_hours} hrs</td>
             <td>${s.required_target_hours} hrs</td>

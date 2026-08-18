@@ -97,7 +97,28 @@ class ClassroomController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $classroom = Classroom::with(['teacher.user', 'course', 'students.user', 'tasks.student.user', 'tasks.attachments'])->findOrFail($id);
+        $teacher = $request->user()->teacher;
+
+        if (!$teacher) {
+            return response()->json(['message' => 'Teacher profile required.'], 403);
+        }
+
+        $classroom = Classroom::with([
+            'teacher.user',
+            'course',
+            'students.user',
+            'students.course',
+            'tasks' => function ($query) {
+                $query->with(['student.user', 'student.course', 'attachments', 'attendance'])
+                    ->orderByDesc('submitted_at');
+            },
+            'attendance' => function ($query) {
+                $query->with(['student.user', 'tasks.attachments'])
+                    ->orderByDesc('time_in');
+            },
+        ])
+            ->where('teacher_id', $teacher->id)
+            ->findOrFail($id);
 
         // Calculate student monitoring progress for enrolled students
         $studentsMonitoring = $classroom->students->map(function ($student) use ($classroom) {
@@ -110,7 +131,9 @@ class ClassroomController extends Controller
         return response()->json([
             'classroom' => $classroom,
             'student_monitoring' => $studentsMonitoring,
+            'tasks' => $classroom->tasks->values(),
             'pending_tasks' => $pendingTasks,
+            'attendance' => $classroom->attendance->values(),
         ]);
     }
 
@@ -170,6 +193,39 @@ class ClassroomController extends Controller
     }
 
     /**
+     * Teacher unenrolls a student from one of their classrooms.
+     */
+    public function unenrollStudent(Request $request, int $classroomId, int $studentId): JsonResponse
+    {
+        $teacher = $request->user()->teacher;
+
+        if (!$teacher) {
+            return response()->json(['message' => 'Teacher profile required.'], 403);
+        }
+
+        $classroom = Classroom::where('teacher_id', $teacher->id)->findOrFail($classroomId);
+        $student = $classroom->students()->where('students.id', $studentId)->first();
+
+        if (!$student) {
+            return response()->json(['message' => 'Student is not enrolled in this classroom.'], 404);
+        }
+
+        $classroom->students()->detach($studentId);
+
+        AuditLogService::log(
+            action: 'unenroll_student',
+            module: 'classroom',
+            userId: $teacher->user_id,
+            recordId: $classroom->id,
+            payload: ['student_id' => $studentId]
+        );
+
+        return response()->json([
+            'message' => 'Student unenrolled from classroom successfully.',
+        ]);
+    }
+
+    /**
      * Student join classroom using 5-digit classroom code.
      */
     public function join(Request $request): JsonResponse
@@ -190,6 +246,30 @@ class ClassroomController extends Controller
             return response()->json([
                 'message' => 'Successfully joined classroom ' . $classroom->classroom_name,
                 'classroom' => $classroom,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Student leave classroom enrollment.
+     */
+    public function leave(Request $request, int $id): JsonResponse
+    {
+        $student = $request->user()->student;
+
+        if (!$student) {
+            return response()->json(['message' => 'Student profile required.'], 403);
+        }
+
+        try {
+            $classroom = $this->classroomService->leaveClassroom($student, $id);
+
+            return response()->json([
+                'message' => 'You left ' . $classroom->classroom_name . '.',
             ]);
         } catch (Exception $e) {
             return response()->json([

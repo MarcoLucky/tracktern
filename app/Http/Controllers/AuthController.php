@@ -7,19 +7,113 @@ use App\Models\Student;
 use App\Models\Teacher;
 use App\Services\ClassroomService;
 use App\Services\AuditLogService;
+use App\Services\PhpMailerService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     protected ClassroomService $classroomService;
+    protected PhpMailerService $mailerService;
 
-    public function __construct(ClassroomService $classroomService)
+    public function __construct(ClassroomService $classroomService, PhpMailerService $mailerService)
     {
         $this->classroomService = $classroomService;
+        $this->mailerService = $mailerService;
+    }
+
+    /**
+     * Send a 6-digit OTP to the user's email for password reset verification.
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => 'required|string|email|exists:users,email',
+        ]);
+
+        $email = strtolower($validated['email']);
+        $user = User::where('email', $email)->firstOrFail();
+        $otp = (string) random_int(100000, 999999);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $email],
+            [
+                'token' => Hash::make($otp),
+                'created_at' => now(),
+            ]
+        );
+
+        $this->mailerService->sendPasswordResetOtp($user, $otp);
+
+        AuditLogService::log(
+            action: 'forgot_password_otp_requested',
+            module: 'auth',
+            userId: $user->id
+        );
+
+        return response()->json([
+            'message' => 'We sent a password reset OTP to your email address.',
+        ]);
+    }
+
+    /**
+     * Verify password reset OTP and set a new password.
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => 'required|string|email|exists:users,email',
+            'otp' => 'required|string|size:6',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $email = strtolower($validated['email']);
+        $record = DB::table('password_reset_tokens')->where('email', $email)->first();
+
+        if (!$record) {
+            throw ValidationException::withMessages([
+                'otp' => ['Please request a new OTP code before resetting your password.'],
+            ]);
+        }
+
+        if (!$record->created_at || Carbon::parse($record->created_at)->lt(now()->subMinutes(15))) {
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+            throw ValidationException::withMessages([
+                'otp' => ['This OTP code has expired. Please request a new code.'],
+            ]);
+        }
+
+        if (!Hash::check($validated['otp'], $record->token)) {
+            throw ValidationException::withMessages([
+                'otp' => ['The OTP code is invalid.'],
+            ]);
+        }
+
+        $user = User::where('email', $email)->firstOrFail();
+        $user->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+        $user->tokens()->delete();
+
+        DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+        AuditLogService::log(
+            action: 'forgot_password_reset_completed',
+            module: 'auth',
+            userId: $user->id
+        );
+
+        return response()->json([
+            'message' => 'Password reset successfully. Please login with your new password.',
+        ]);
     }
 
     /**
@@ -97,7 +191,7 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['Invalid email or password credentials.'],
+                'email' => ['Invalid email address or password.'],
             ]);
         }
 
@@ -163,8 +257,16 @@ class AuthController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
+            'email' => [
+                'sometimes',
+                'string',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
             'contact_number' => 'sometimes|nullable|string|max:20',
             'company_name' => 'sometimes|nullable|string|max:255',
+            'organization_location' => 'sometimes|nullable|string|max:255',
             'internship_start_date' => 'sometimes|nullable|date',
             'internship_end_date' => 'sometimes|nullable|date|after_or_equal:internship_start_date',
             'target_hours' => 'sometimes|nullable|integer|min:0',
@@ -175,24 +277,72 @@ class AuthController extends Controller
             $user->update(['name' => $validated['name']]);
         }
 
+        if (isset($validated['email'])) {
+            $user->update(['email' => strtolower($validated['email'])]);
+        }
+
         if ($user->isStudent() && $user->student) {
-            $user->student->update(array_filter([
-                'contact_number' => $validated['contact_number'] ?? $user->student->contact_number,
-                'company_name' => $validated['company_name'] ?? $user->student->company_name,
-                'internship_start_date' => $validated['internship_start_date'] ?? $user->student->internship_start_date,
-                'internship_end_date' => $validated['internship_end_date'] ?? $user->student->internship_end_date,
-                'target_hours' => $validated['target_hours'] ?? $user->student->target_hours,
-            ]));
+            $studentUpdates = [];
+
+            foreach (['contact_number', 'company_name', 'organization_location', 'internship_start_date', 'internship_end_date', 'target_hours'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $studentUpdates[$field] = $validated[$field];
+                }
+            }
+
+            if ($studentUpdates) {
+                $user->student->update($studentUpdates);
+            }
         } elseif ($user->isTeacher() && $user->teacher) {
-            $user->teacher->update(array_filter([
-                'department' => $validated['department'] ?? $user->teacher->department,
-            ]));
+            $teacherUpdates = [];
+
+            foreach (['contact_number', 'department'] as $field) {
+                if (array_key_exists($field, $validated)) {
+                    $teacherUpdates[$field] = $validated[$field];
+                }
+            }
+
+            if ($teacherUpdates) {
+                $user->teacher->update($teacherUpdates);
+            }
         }
 
         $user->load(['student.course', 'teacher']);
 
         return response()->json([
             'message' => 'Profile updated successfully.',
+            'user' => $user,
+        ]);
+    }
+
+    /**
+     * Upload or replace the authenticated student's profile photo.
+     */
+    public function updateProfilePhoto(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->isStudent() || !$user->student) {
+            return response()->json(['message' => 'Student profile required.'], 403);
+        }
+
+        $validated = $request->validate([
+            'profile_photo' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        if ($user->student->profile_photo_path) {
+            Storage::disk('public')->delete($user->student->profile_photo_path);
+        }
+
+        $path = $validated['profile_photo']->store('profile_photos', 'public');
+        $user->student->update([
+            'profile_photo_path' => $path,
+        ]);
+
+        $user->load(['student.course', 'teacher']);
+
+        return response()->json([
+            'message' => 'Profile photo updated successfully.',
             'user' => $user,
         ]);
     }
